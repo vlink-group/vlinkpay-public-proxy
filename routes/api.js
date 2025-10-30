@@ -149,10 +149,49 @@ router.post('/baonail/phone-contact', async (req, res) => {
       }
     });
 
-    res.json(response.data);
+    // Format response as JSON for n8n compatibility
+    res.json({
+      status: 'success',
+      message: 'Request completed successfully',
+      data: {
+        raw_response: response.data,
+        response_type: typeof response.data === 'string' ? 'html/text' : 'json',
+        status_code: response.status,
+        headers: response.headers,
+        timestamp: new Date().toISOString()
+      }
+    });
 
   } catch (error) {
+    console.error('Baonail API error:', error.message);
     
+    let errorMessage = 'Failed to fetch contact information from Baonail';
+    let statusCode = 500;
+    let errorDetails = null;
+
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Request timeout - Baonail API took too long to respond';
+      statusCode = 504;
+    } else if (error.response) {
+      errorMessage = `Baonail API error: ${error.response.status} ${error.response.statusText}`;
+      statusCode = error.response.status;
+      errorDetails = {
+        status_code: error.response.status,
+        response_data: error.response.data,
+        headers: error.response.headers
+      };
+    } else if (error.request) {
+      errorMessage = 'Network error - Unable to reach Baonail API';
+      statusCode = 503;
+    }
+
+    res.status(statusCode).json({
+      status: 'error',
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      details: errorDetails,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
